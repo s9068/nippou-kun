@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="日報くん" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>日報くん</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; background: #f9f9f7; font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif; }
+
+    .screen { display: none; flex-direction: column; height: 100dvh; }
+    .screen.active { display: flex; }
+
+    /* ── チャット画面 ── */
+    #chatScreen { background: #f9f9f7; }
+    .chat-header { background: #fff; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top)); display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; }
+    .header-av { width: 36px; height: 36px; border-radius: 50%; background: #E1F5EE; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .header-info h2 { font-size: 15px; font-weight: 700; color: #111; }
+    .header-info p { font-size: 11px; color: #aaa; }
+    .header-btns { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+    .header-reset { font-size: 12px; color: #aaa; padding: 6px 10px; border: 1px solid #e0e0e0; border-radius: 20px; background: transparent; cursor: pointer; }
+    .speaker-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid #e0e0e0; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: background .15s; }
+    .speaker-btn.on { background: #E1F5EE; border-color: #1D9E75; }
+    .speaker-btn.speaking { background: #E1F5EE; border-color: #1D9E75; animation: pulse 1.2s ease-in-out infinite; }
+    .voice-panel { background: #fff; border-top: 1px solid #f0f0f0; padding: 10px 16px; display: none; gap: 12px; align-items: center; flex-shrink: 0; }
+    .voice-panel.show { display: flex; }
+    .voice-panel label { font-size: 12px; color: #555; white-space: nowrap; }
+    .voice-panel select { flex: 1; font-size: 13px; padding: 5px 8px; border: 1px solid #e0e0e0; border-radius: 8px; background: #fafafa; color: #111; }
+    .voice-panel input[type=range] { flex: 1; }
+
+    .messages { flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch; }
+
+    .bwrap { display: flex; align-items: flex-end; gap: 8px; }
+    .bwrap.user { flex-direction: row-reverse; }
+    .bav { width: 28px; height: 28px; border-radius: 50%; background: #f0f0f0; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+    .bubble { max-width: 80%; padding: 10px 14px; font-size: 15px; line-height: 1.65; }
+    .bubble.ai { background: #fff; color: #111; border-radius: 4px 18px 18px 18px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+    .bubble.user { background: #1D9E75; color: #fff; border-radius: 18px 4px 18px 18px; }
+    .bubble.report { background: #fff; border-radius: 4px 18px 18px 18px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 14px 16px; max-width: 92%; }
+    .rtitle { font-size: 13px; font-weight: 700; color: #111; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px solid #f0f0f0; }
+    .rsec { margin-bottom: 10px; }
+    .rlbl { font-size: 10px; color: #aaa; letter-spacing: .04em; margin-bottom: 3px; text-transform: uppercase; }
+    .rval { font-size: 13px; color: #222; line-height: 1.75; white-space: pre-wrap; }
+    .rclosing { font-size: 13px; color: #1D9E75; margin-top: 8px; }
+    .ract { display: flex; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #f0f0f0; }
+    .ract button { flex: 1; font-size: 13px; padding: 8px; border: 1px solid #e0e0e0; border-radius: 10px; cursor: pointer; background: #f9f9f7; color: #333; }
+    .ract button:active { background: #eee; }
+
+    .typing-wrap { display: flex; align-items: flex-end; gap: 8px; }
+    .typing-bub { display: flex; gap: 4px; padding: 10px 14px; background: #fff; border-radius: 4px 18px 18px 18px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+    .typing-bub span { width: 7px; height: 7px; border-radius: 50%; background: #ccc; animation: blink 1.2s infinite; display: block; }
+    .typing-bub span:nth-child(2){animation-delay:.2s}.typing-bub span:nth-child(3){animation-delay:.4s}
+    @keyframes blink{0%,80%,100%{opacity:.3}40%{opacity:1}}
+
+    /* ── 入力エリア ── */
+    .input-area { background: #fff; border-top: 1px solid #f0f0f0; padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); flex-shrink: 0; }
+    .input-row { display: flex; gap: 8px; align-items: flex-end; }
+    .mic-btn { width: 48px; height: 48px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; background: #f0f0f0; flex-shrink: 0; transition: background .15s; }
+    .mic-btn.on { background: #E24B4A; animation: pulse 1.2s ease-in-out infinite; }
+    .mic-btn.on svg { stroke: #fff; }
+    .mic-btn:disabled { opacity: .3; }
+    @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+    textarea#inp { flex: 1; padding: 10px 14px; border: 1.5px solid #e0e0e0; border-radius: 20px; font-size: 15px; font-family: inherit; resize: none; min-height: 44px; max-height: 120px; background: #fafafa; color: #111; line-height: 1.5; }
+    textarea#inp:focus { outline: none; border-color: #1D9E75; background: #fff; }
+    textarea#inp.listening { border-color: #E24B4A; background: #fff5f5; }
+    .send-btn { width: 48px; height: 48px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; background: #1D9E75; flex-shrink: 0; }
+    .send-btn:active { background: #0F6E56; }
+    .send-btn:disabled { opacity: .35; }
+    .voice-hint { font-size: 11px; color: #E24B4A; text-align: center; margin-top: 5px; min-height: 14px; }
+  </style>
+</head>
+<body>
+
+<!-- チャット画面 -->
+<div class="screen active" id="chatScreen">
+  <div class="chat-header">
+    <div class="header-av">📋</div>
+    <div class="header-info">
+      <h2>日報くん</h2>
+      <p id="dateLabel"></p>
+    </div>
+    <div class="header-btns">
+      <button class="speaker-btn" id="speakerBtn" title="読み上げ ON/OFF">🔇</button>
+      <button class="header-reset" id="resetBtn">リセット</button>
+    </div>
+  </div>
+
+  <div class="voice-panel" id="voicePanel">
+    <label>声</label>
+    <select id="voiceSelect"></select>
+    <label>速さ</label>
+    <input type="range" id="rateRange" min="0.7" max="1.8" step="0.1" value="1.1" style="width:70px" />
+    <span id="rateVal" style="font-size:12px;color:#888;min-width:24px">1.1</span>
+  </div>
+
+  <div class="messages" id="messages"></div>
+
+  <div class="input-area">
+    <div class="input-row">
+      <button class="mic-btn" id="micBtn">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="2" width="6" height="12" rx="3"/>
+          <path d="M5 10a7 7 0 0 0 14 0"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="8" y1="22" x2="16" y2="22"/>
+        </svg>
+      </button>
+      <textarea id="inp" placeholder="テキストでも話しかけてOK..." rows="1"></textarea>
+      <button class="send-btn" id="sendBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+    <div class="voice-hint" id="voiceHint"></div>
+  </div>
+</div>
+
+<script>
+const now = new Date();
+const dateStr = now.toLocaleDateString('ja-JP', { year:'numeric', month:'long', day:'numeric', weekday:'short' });
+document.getElementById('dateLabel').textContent = dateStr;
+
+let apiKey = 'ここにAPIキーを貼り付けてください';
+let history = [];
+let isLoading = false;
+let isRecording = false;
+let recognition = null;
+let accumulated = '';
+window._reportText = '';
+
+// ── 読み上げ機能 ──
+let ttsEnabled = false;
+let voices = [];
+let selectedVoice = null;
+
+const speakerBtn = document.getElementById('speakerBtn');
+const voicePanel = document.getElementById('voicePanel');
+const voiceSelect = document.getElementById('voiceSelect');
+const rateRange = document.getElementById('rateRange');
+const rateVal = document.getElementById('rateVal');
+
+function loadVoices() {
+  voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith('ja'));
+  if (!voices.length) voices = speechSynthesis.getVoices();
+  voiceSelect.innerHTML = '';
+  voices.forEach((v, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = v.name.replace('Microsoft ', '').replace(' - Japanese (Japan)', '');
+    if (v.lang.startsWith('ja')) opt.textContent += ' 🇯🇵';
+    voiceSelect.appendChild(opt);
+  });
+  const jaIdx = voices.findIndex(v => v.lang.startsWith('ja'));
+  if (jaIdx >= 0) voiceSelect.value = jaIdx;
+  selectedVoice = voices[voiceSelect.value] || voices[0];
+}
+
+speechSynthesis.onvoiceschanged = loadVoices;
+loadVoices();
+
+voiceSelect.addEventListener('change', () => { selectedVoice = voices[voiceSelect.value]; });
+rateRange.addEventListener('input', () => { rateVal.textContent = parseFloat(rateRange.value).toFixed(1); });
+
+speakerBtn.addEventListener('click', () => {
+  ttsEnabled = !ttsEnabled;
+  speakerBtn.textContent = ttsEnabled ? '🔊' : '🔇';
+  speakerBtn.classList.toggle('on', ttsEnabled);
+  voicePanel.classList.toggle('show', ttsEnabled);
+  if (!ttsEnabled) speechSynthesis.cancel();
+});
+
+function speak(text) {
+  if (!ttsEnabled || !text) return;
+  speechSynthesis.cancel();
+  const clean = text.replace(/[📋▼■]/g, '').replace(/\n+/g, '。').trim();
+  const utt = new SpeechSynthesisUtterance(clean);
+  utt.lang = 'ja-JP';
+  utt.rate = parseFloat(rateRange.value);
+  if (selectedVoice) utt.voice = selectedVoice;
+  utt.onstart = () => speakerBtn.classList.add('speaking');
+  utt.onend = () => speakerBtn.classList.remove('speaking');
+  utt.onerror = () => speakerBtn.classList.remove('speaking');
+  speechSynthesis.speak(utt);
+}
+
+const SYSTEM = `あなたは「日報くん」という名前の、ちょっとフレンドリーな日報アシスタントです。
+今日は${dateStr}です。
+
+キャラクター:
+- タメ口でフレンドリー。でも失礼にはならない程度
+- 「おつかれ！」「なるほどね〜」「それいいじゃん！」みたいなリアクション
+- ユーザーが話しかけたら自然な会話で今日の業務を聞き出す
+- 絵文字は使わない
+- 返答は短く（1〜3文）、テンポよく
+
+会話の流れ:
+1. まず「今日どうだった？」と聞く
+2. 業務内容・成果・課題・明日の予定を自然な会話で聞き出す（一度に全部聞かない）
+3. 情報が揃ってきたら「じゃあまとめようか？」と提案
+4. ユーザーが「まとめて」「OK」「うん」などと言ったらJSONのみ出力
+
+日報JSON（まとめる時だけ、このJSONのみ出力。マークダウン不要）:
+{"type":"report","sections":{"業務内容":"","成果・進捗":"","課題・懸念点":"","明日の予定":""},"closing":"ひとこと労いのメッセージ"}
+
+清書ルール（JSON出力時に適用）:
+- 話し言葉→ビジネス文体（「〜した感じです」→「〜しました」など）
+- 箇条書きを自然な文章にまとめる
+- 各セクションは2〜3文の文章で`;
+
+const GOBI = [
+  [/した感じです/g,'しました'],[/てる感じです/g,'ています'],
+  [/んですけど([。\n]|$)/g,'ました$1'],[/てたんですけど/g,'ていました'],
+  [/してる/g,'しています'],[/できてる/g,'できています'],
+  [/やるつもり/g,'実施予定'],[/つもりです/g,'予定です'],
+  [/直した([。\n]|$)/g,'修正しました$1'],[/作った([。\n]|$)/g,'作成しました$1'],
+  [/決めた([。\n]|$)/g,'決定しました$1'],[/終わった([。\n]|$)/g,'完了しました$1'],
+  [/話した([。\n]|$)/g,'話し合いました$1'],[/MTG/g,'ミーティング'],
+  [/ちょっと/g,''],[/なんか([、\s])/g,'$1'],[/とか([。、\n])/g,'$1'],
+];
+function polish(t) { for (const [p,r] of GOBI) t = t.replace(p,r); return t.trim(); }
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (!confirm('会話をリセットする？')) return;
+  history = [];
+  document.getElementById('messages').innerHTML = '';
+  startChat();
+});
+
+function showChat() {
+  setupMic();
+  if (history.length === 0) startChat();
+}
+
+showChat();
+
+function addMsg(role, content, isReport, textToSpeak) {
+  const msgs = document.getElementById('messages');
+  const wrap = document.createElement('div');
+  wrap.className = 'bwrap' + (role === 'user' ? ' user' : '');
+  const av = document.createElement('div');
+  av.className = 'bav';
+  av.textContent = role === 'user' ? '🙂' : '📋';
+  const bub = document.createElement('div');
+  if (isReport) {
+    bub.className = 'bubble report';
+    bub.innerHTML = content;
+  } else {
+    bub.className = 'bubble ' + (role === 'user' ? 'user' : 'ai');
+    bub.textContent = content;
+  }
+  wrap.appendChild(av);
+  wrap.appendChild(bub);
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+  if (role === 'ai' && textToSpeak) speak(textToSpeak);
+}
+
+function showTyping() {
+  const msgs = document.getElementById('messages');
+  const w = document.createElement('div');
+  w.className = 'typing-wrap'; w.id = 'typing';
+  w.innerHTML = '<div class="bav">📋</div><div class="typing-bub"><span></span><span></span><span></span></div>';
+  msgs.appendChild(w);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+function removeTyping() { const t = document.getElementById('typing'); if (t) t.remove(); }
+
+function buildReportHTML(r) {
+  const secs = r.sections;
+  const html = Object.entries(secs)
+    .filter(([,v]) => v && v.trim())
+    .map(([k,v]) => `<div class="rsec"><div class="rlbl">${k}</div><div class="rval">${polish(v)}</div></div>`)
+    .join('');
+  const closing = r.closing || 'お疲れさまでした！';
+  window._reportText = `【日報】${dateStr}\n\n` + Object.entries(secs)
+    .filter(([,v])=>v&&v.trim())
+    .map(([k,v])=>`▼${k}\n${polish(v)}`).join('\n\n');
+  return `<div class="rtitle">📋 日報 — ${dateStr}</div>${html}
+    <div class="rclosing">${closing}</div>
+    <div class="ract">
+      <button onclick="doCopy(this)">コピー</button>
+      <button onclick="doShare()">共有</button>
+    </div>`;
+}
+
+window.doCopy = function(btn) {
+  navigator.clipboard.writeText(window._reportText).then(() => {
+    btn.textContent = 'コピー完了!';
+    setTimeout(() => { btn.textContent = 'コピー'; }, 2000);
+  });
+};
+window.doShare = async function() {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: '日報', text: window._reportText });
+    } catch(e) {}
+  } else {
+    navigator.clipboard.writeText(window._reportText);
+    alert('クリップボードにコピーしました！');
+  }
+};
+
+async function chat(userText) {
+  if (!userText.trim() || isLoading) return;
+  isLoading = true;
+  document.getElementById('sendBtn').disabled = true;
+  addMsg('user', userText);
+  history.push({ role:'user', content: userText });
+  document.getElementById('inp').value = '';
+  document.getElementById('inp').style.height = 'auto';
+  showTyping();
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'x-api-key': apiKey, 'anthropic-version':'2023-06-01' },
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000, system: SYSTEM, messages: history })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const reply = data.content[0].text.trim();
+    removeTyping();
+    let parsed = null;
+    try { parsed = JSON.parse(reply); } catch(e) {}
+    if (parsed && parsed.type === 'report') {
+      addMsg('ai', buildReportHTML(parsed), true, parsed.closing || 'お疲れさまでした！');
+      history.push({ role:'assistant', content: reply });
+    } else {
+      addMsg('ai', reply, false, reply);
+      history.push({ role:'assistant', content: reply });
+    }
+  } catch(e) {
+    removeTyping();
+    addMsg('ai', 'ごめん、エラーになっちゃった。もう一回試してみて！');
+    if (e.message && e.message.includes('auth')) {
+      localStorage.removeItem('nippou_apikey');
+    }
+  }
+  isLoading = false;
+  document.getElementById('sendBtn').disabled = false;
+}
+
+function startChat() {
+  setTimeout(() => {
+    const g = `おつかれ！${now.toLocaleDateString('ja-JP',{month:'long',day:'numeric'})}の日報、一緒に作ろう。\n今日どうだった？`;
+    addMsg('ai', g, false, g);
+    history.push({ role:'assistant', content: g });
+  }, 300);
+}
+
+document.getElementById('sendBtn').addEventListener('click', () => {
+  if (isRecording) stopRec(true);
+  else chat(document.getElementById('inp').value);
+});
+document.getElementById('inp').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (isRecording) stopRec(true); else chat(document.getElementById('inp').value); }
+});
+document.getElementById('inp').addEventListener('input', () => {
+  const el = document.getElementById('inp');
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+});
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function setupMic() {
+  const btn = document.getElementById('micBtn');
+  if (!SR) { btn.disabled = true; return; }
+  const rec = new SR();
+  rec.lang = 'ja-JP'; rec.continuous = true; rec.interimResults = true;
+  rec.onresult = ev => {
+    let s = accumulated;
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      if (ev.results[i].isFinal) { accumulated += ev.results[i][0].transcript; s = accumulated; }
+      else { s = accumulated + ev.results[i][0].transcript; }
+    }
+    const el = document.getElementById('inp');
+    el.value = s;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  };
+  rec.onend = () => { if (isRecording) { try { rec.start(); } catch(e){} } };
+  rec.onerror = ev => { if (ev.error !== 'no-speech') stopRec(false); };
+  recognition = rec;
+  btn.addEventListener('click', () => { if (isRecording) stopRec(true); else startRec(); });
+}
+
+function startRec() {
+  if (!recognition || isRecording) return;
+  isRecording = true;
+  accumulated = document.getElementById('inp').value;
+  try { recognition.start(); } catch(e) {}
+  document.getElementById('micBtn').classList.add('on');
+  document.getElementById('inp').classList.add('listening');
+  document.getElementById('voiceHint').textContent = '録音中… もう一度押すと送信';
+}
+
+function stopRec(andSend) {
+  if (!isRecording) return;
+  isRecording = false;
+  try { recognition.stop(); } catch(e) {}
+  document.getElementById('micBtn').classList.remove('on');
+  document.getElementById('inp').classList.remove('listening');
+  document.getElementById('voiceHint').textContent = '';
+  const val = document.getElementById('inp').value;
+  if (andSend && val.trim()) chat(val);
+}
+</script>
+</body>
+</html>
