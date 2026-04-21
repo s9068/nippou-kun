@@ -155,7 +155,7 @@ function loadVoices() {
     opt.textContent = v.name.replace('Microsoft ', '').replace(' - Japanese (Japan)', '');
     if (v.lang.startsWith('ja')) opt.textContent += ' 🇯🇵';
     voiceSelect.appendChild(opt);
-  let apiKey = 'sk-ant-...';
+  let apiKey = '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';
   const jaIdx = voices.findIndex(v => v.lang.startsWith('ja'));
   if (jaIdx >= 0) voiceSelect.value = jaIdx;
   selectedVoice = voices[voiceSelect.value] || voices[0];
